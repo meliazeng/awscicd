@@ -4,9 +4,12 @@ import { PolicyStatement } from '@aws-cdk/aws-iam';
 /** Defines things that can vary between each serverless.yml service */
 export interface ServiceDefinition {
     serviceName: string;
-    githubRepo: string;
+    githubRepoService: string;
+    githubRepoMVP: string;
     githubOwner: string;
     githubTokenSsmPath: string;
     /** Permissions that CodeBuild role needs to assume to deploy serverless stack */
     deployPermissions: PolicyStatement[];
+    s3DeployBucketStagingArn: string;
+    s3DeployBucketProdArn: string;
 }

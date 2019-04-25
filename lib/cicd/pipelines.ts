@@ -4,11 +4,12 @@ import { Construct, Stack, SecretParameter } from '@aws-cdk/cdk';
 import {
     Role, ServicePrincipal, Policy, PolicyStatement, PolicyStatementEffect,
 } from '@aws-cdk/aws-iam';
+import { PipelineDeployAction, Bucket} from '@aws-cdk/aws-s3';
 import { Topic } from '@aws-cdk/aws-sns';
 import { EventRule } from '@aws-cdk/aws-events';
 import { Pipeline, GitHubSourceAction } from '@aws-cdk/aws-codepipeline';
 import {
-    Project, CodePipelineSource, LinuxBuildImage,
+    Project, CodePipelineSource, LinuxBuildImage, //S3BucketBuildArtifacts,
 } from '@aws-cdk/aws-codebuild';
 import { ServiceDefinition } from './service-definition';
 import { CrossAccountDeploymentRole } from './cross-account-deployment';
@@ -91,80 +92,127 @@ export class ServicePipeline extends Construct {
             ssmParameter: props.service.githubTokenSsmPath,
         });
 
-        const sourceAction = new GitHubSourceAction({
+        const sourceServicesAction = new GitHubSourceAction({
             actionName: props.sourceTrigger === SourceTrigger.PullRequest ? 'GitHub_SubmitPR' : 'GitHub_PushToMaster',
             owner: props.service.githubOwner,
-            repo: props.service.githubRepo,
+            repo: props.service.githubRepoService,
+            runOrder: 1,
             branch: 'master',
             oauthToken: oauth.value,
-            outputArtifactName: 'SourceOutput',
+            outputArtifactName: 'SourceOutputServices',
+        });
+
+        const sourceMVPAction = new GitHubSourceAction({
+            actionName: props.sourceTrigger === SourceTrigger.PullRequest ? 'GitHub_SubmitPR' : 'GitHub_PushToMaster',
+            owner: props.service.githubOwner,
+            repo: props.service.githubRepoMVP,
+            runOrder: 2,
+            branch: 'master',
+            oauthToken: oauth.value,
+            outputArtifactName: 'SourceOutputMVP',
         });
 
         this.pipeline.addStage({
             name: 'Source',
-            actions: [sourceAction],
+            actions: [sourceServicesAction, sourceMVPAction],
         });
 
         // Create stages for DEV => STAGING => PROD.
         // Each stage defines its own steps in its own build file
-        const buildProject = new ServiceCodebuildProject(this.pipeline, 'buildProject', {
-            projectName: `${pipelineName}_dev`,
-            buildSpec: 'buildspec.dev.yml',
+        const buildProjectServices = new ServiceCodebuildProject(this.pipeline, 'buildProjectServices', {
+            projectName: `${pipelineName}_services_build`,
+            buildSpec: 'buildspec.tools.yml',
             deployerRoleArn: CrossAccountDeploymentRole.getRoleArnForService(
-                props.service.serviceName, 'dev', deploymentTargetAccounts.dev.accountId,
+                props.service.serviceName, 'dev', deploymentTargetAccounts.tools.accountId,
             ),
         });
-        const buildAction = buildProject.project.toCodePipelineBuildAction({
-            actionName: 'Build_Deploy_DEV',
-            inputArtifact: sourceAction.outputArtifact,
+        const buildActionServices = buildProjectServices.project.toCodePipelineBuildAction({
+            actionName: 'Build_Packages_For_Deploy',
+            runOrder: 1,
+            inputArtifact: sourceServicesAction.outputArtifact,
             outputArtifactName: 'sourceOutput',
             additionalOutputArtifactNames: [
-                'devPackage',
+                'stagingPackage',
+                'prodPackage',
+            ],
+        });
+        const buildProjectMVP = new ServiceCodebuildProject(this.pipeline, 'buildProjectMVP', {
+            projectName: `${pipelineName}_mvp_build`,
+            buildSpec: 'buildspec.tools.yml',
+            deployerRoleArn: CrossAccountDeploymentRole.getRoleArnForService(
+                props.service.serviceName, 'dev', deploymentTargetAccounts.tools.accountId,
+            ),
+        });
+        const buildActionMVP = buildProjectMVP.project.toCodePipelineBuildAction({
+            actionName: 'Build_Packages_For_Deploy',
+            runOrder: 2,
+            inputArtifact: sourceMVPAction.outputArtifact,
+            outputArtifactName: 'sourceOutput',
+            additionalOutputArtifactNames: [
                 'stagingPackage',
                 'prodPackage',
             ],
         });
         this.pipeline.addStage({
-            name: 'Build_Deploy_DEV',
-            actions: [buildAction],
+            name: 'Build_Packages',
+            actions: [buildActionServices, buildActionMVP],
         });
-        const stagingProject = new ServiceCodebuildProject(this.pipeline, 'deploy-staging', {
-            projectName: `${pipelineName}_staging`,
+        const stagingProjectServices = new ServiceCodebuildProject(this.pipeline, 'deploy-services-staging', {
+            projectName: `${pipelineName}_services_staging`,
             buildSpec: 'buildspec.staging.yml',
             deployerRoleArn: CrossAccountDeploymentRole.getRoleArnForService(
                 props.service.serviceName, 'staging', deploymentTargetAccounts.staging.accountId,
             ),
         });
-        const stagingAction = stagingProject.project.toCodePipelineBuildAction({
-            actionName: 'Deploy_STAGING',
-            inputArtifact: sourceAction.outputArtifact,
+        const stagingActionServices = stagingProjectServices.project.toCodePipelineBuildAction({
+            actionName: 'Deploy_STAGING_Services',
+            runOrder: 1,
+            inputArtifact: sourceServicesAction.outputArtifact,
             additionalInputArtifacts: [
-                buildAction.additionalOutputArtifact('stagingPackage'),
+                buildActionServices.additionalOutputArtifact('stagingPackage'),
             ],
+        });
+        const stagingActionS3MVP = new PipelineDeployAction({
+            inputArtifact: sourceMVPAction.outputArtifact,
+            extract: true,
+            runOrder: 2,
+            actionName: 'Deploy_STAGING_Services',
+            bucket: Bucket.import(this, 'StagingTargetBucket', {
+                bucketArn: props.service.s3DeployBucketStagingArn
+            }),
         });
         this.pipeline.addStage({
             name: 'Deploy_STAGING',
-            actions: [stagingAction],
+            actions: [stagingActionServices, stagingActionS3MVP],
         });
-
         // Prod stage requires cross-account access as codebuild isn't running in same account
-        const prodProject = new ServiceCodebuildProject(this.pipeline, 'deploy-prod', {
-            projectName: `${pipelineName}_prod`,
+        const prodProjectServices = new ServiceCodebuildProject(this.pipeline, 'deploy-services-prod', {
+            projectName: `${pipelineName}_services_prod`,
             buildSpec: 'buildspec.prod.yml',
             deployerRoleArn: CrossAccountDeploymentRole.getRoleArnForService(
                 props.service.serviceName, 'prod', deploymentTargetAccounts.prod.accountId,
             ),
         });
-        const prodAction = prodProject.project.toCodePipelineBuildAction({
-            actionName: 'Deploy_PROD',
-            inputArtifact: sourceAction.outputArtifact,
+        const prodActionServices = prodProjectServices.project.toCodePipelineBuildAction({
+            actionName: 'Deploy_PROD_Services',
+            runOrder: 1,
+            inputArtifact: sourceServicesAction.outputArtifact,
             additionalInputArtifacts: [
-                buildAction.additionalOutputArtifact('prodPackage'),
+                buildActionServices.additionalOutputArtifact('prodPackage'),
             ],
+        });
+        const prodActionS3MVP = new PipelineDeployAction({
+            inputArtifact: sourceMVPAction.outputArtifact,
+            extract: true,
+            runOrder: 2,
+            actionName: 'Deploy_STAGING_Services',
+            bucket: Bucket.import(this, 'ProdTargetBucket', {
+                bucketArn: props.service.s3DeployBucketProdArn
+            }),
         });
         this.pipeline.addStage({
             name: 'Deploy_PROD',
-            actions: [prodAction],
+            actions: [prodActionServices, prodActionS3MVP],
         });
 
         // Wire up pipeline error notifications
@@ -207,6 +255,7 @@ export class ServiceCodebuildProject extends Construct {
         });
     }
 }
+
 
 export interface ServiceDeployerRoleProps {
     deployerRoleArn: string;

@@ -4,10 +4,13 @@ import { ServiceDefinition } from '../lib/cicd/service-definition';
 import { githubOwner, githubTokenSsmPath } from './config';
 
 const mySlsService: ServiceDefinition = {
-    serviceName: 'my-sls-service',
-    githubRepo: 'my-sls-service',
+    serviceName: 'profound-impact',
+    githubRepoService: 'Services',
+    githubRepoMVP: 'MVP',
     githubOwner,
     githubTokenSsmPath,
+    s3DeployBucketProdArn: '',
+    s3DeployBucketStagingArn: '',
     // TODO: should lock down below permissions to specific resources
     deployPermissions: [
         new PolicyStatement(PolicyStatementEffect.Allow)

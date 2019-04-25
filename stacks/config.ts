@@ -4,7 +4,7 @@ export const githubTokenSsmPath = '/path/to/github-personal-access-token';
 
 /** List of stages/accounts that CICD pipeline can deploy to */
 export const deploymentTargetAccounts = {
-    dev: {
+    tools: {
         accountId: '1234567890',
     },
     staging: {
