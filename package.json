@@ -2,7 +2,7 @@
   "name": "awscicd",
   "version": "0.1.0",
   "bin": {
-    "awscicd": "bin/awscicd.js"
+    "awscicd": "stacks/cicd-pipelines.js"
   },
   "scripts": {
     "build": "tsc",
@@ -12,10 +12,16 @@
   "devDependencies": {
     "@types/node": "8.10.40",
     "typescript": "^3.3.3333",
-    "aws-cdk": "^0.28.0"
+    "aws-cdk": "^0.27.0"
   },
   "dependencies": {
-    "@aws-cdk/cdk": "^0.28.0",
-    "source-map-support": "^0.5.9"
+    "@aws-cdk/cdk": "^0.27.0",
+    "source-map-support": "^0.5.9",
+    "@aws-cdk/aws-sns": "^0.27.0",
+    "@aws-cdk/aws-sqs": "^0.27.0",
+    "@aws-cdk/aws-iam": "^0.27.0",
+    "@aws-cdk/aws-events": "^0.27.0",
+    "@aws-cdk/aws-codepipeline": "^0.27.0",
+    "@aws-cdk/aws-codebuild": "^0.27.0"
   }
 }
