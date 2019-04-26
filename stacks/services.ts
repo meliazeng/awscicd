@@ -11,6 +11,14 @@ const mySlsService: ServiceDefinition = {
     githubTokenSsmPath,
     s3DeployBucketProdArn: '',
     s3DeployBucketStagingArn: '',
+    accessPermissions: [
+        new PolicyStatement(PolicyStatementEffect.Allow)
+            .addActions(
+                '',
+                '',
+            ).addAllResources()
+    ],
+
     // TODO: should lock down below permissions to specific resources
     deployPermissions: [
         new PolicyStatement(PolicyStatementEffect.Allow)

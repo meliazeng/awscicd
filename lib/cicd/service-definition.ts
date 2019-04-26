@@ -8,6 +8,7 @@ export interface ServiceDefinition {
     githubRepoMVP: string;
     githubOwner: string;
     githubTokenSsmPath: string;
+    accessPermissions: PolicyStatement[];
     /** Permissions that CodeBuild role needs to assume to deploy serverless stack */
     deployPermissions: PolicyStatement[];
     s3DeployBucketStagingArn: string;
