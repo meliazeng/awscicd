@@ -14,9 +14,14 @@ const mySlsService: ServiceDefinition = {
     accessPermissions: [
         new PolicyStatement(PolicyStatementEffect.Allow)
             .addActions(
-                '',
-                '',
-            ).addAllResources()
+                's3:ListAllMyBuckets',
+                's3:GetBucketLocation',
+                's3:PutObject',
+                's3:GetObject',
+                'sts:AssumeRole',
+                's3:ListBucket',
+                's3:GetBucketPolicy'
+            )
     ],
 
     // TODO: should lock down below permissions to specific resources

@@ -57,6 +57,9 @@ export class ServiceCicdPipelines extends Construct {
                 sourceTrigger: SourceTrigger.Master,
                 alertsTopic: this.alertsTopic,
                 deploymentTargetAccounts: props.deploymentTargetAccounts,
+                s3DeployBucketStagingArn: service.s3DeployBucketStagingArn,
+                s3DeployBucketProdArn: service.s3DeployBucketProdArn,
+                accessPermissions: service.accessPermissions
             }).pipeline);
             // TODO: also create a PR pipeline
         });
@@ -72,20 +75,41 @@ export interface ServicePipelineProps {
     deploymentTargetAccounts: DeploymentTargetAccounts;
     /** Optional SNS topic to send pipeline failure notifications to */
     alertsTopic?: Topic;
+    s3DeployBucketStagingArn: string;
+    s3DeployBucketProdArn: string;
+    accessPermissions: PolicyStatement[];
+
 }
 
 /** Creates a single end-to-end Pipeline for a specific service definition. */
 export class ServicePipeline extends Construct {
     readonly pipeline: Pipeline;
+    
+    readonly pipelineRole: Role;
+
+    readonly policy: Policy;
 
     readonly alert: PipelineFailedAlert;
 
     constructor(scope: Construct, id: string, props: ServicePipelineProps) {
         super(scope, id);
         const pipelineName = `${props.service.serviceName}_${props.sourceTrigger}`;
+        
         this.pipeline = new Pipeline(scope, pipelineName, {
-            pipelineName,
+            pipelineName, 
         });
+        // Assign permission to pipeline role to access webhost bucket on stage.
+        this.pipelineRole = this.pipeline.role;
+        const passrole = props.accessPermissions[0]
+            .addResource(props.s3DeployBucketStagingArn)
+            .addResource(props.s3DeployBucketStagingArn + "/*")
+            .addResource(props.s3DeployBucketProdArn + "/*")
+            .addResource(props.s3DeployBucketProdArn);   
+
+        this.policy = new Policy(scope, 'sls-s3-deployer-policy', {
+            statements: [passrole],
+        });
+        this.policy.attachToRole(this.pipelineRole);
 
         // https://docs.aws.amazon.com/codepipeline/latest/userguide/GitHub-rotate-personal-token-CLI.html
         const oauth = new SecretParameter(scope, 'GithubPersonalAccessToken', {
@@ -255,7 +279,6 @@ export class ServiceCodebuildProject extends Construct {
         });
     }
 }
-
 
 export interface ServiceDeployerRoleProps {
     deployerRoleArn: string;
