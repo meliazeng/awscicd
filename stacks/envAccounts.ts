@@ -1,18 +1,17 @@
-// /stacks/cicd-pipelines.ts
+// /stacks/envAccounts.ts
 // CDK app which creates a stack using a set of service definitions
 import 'source-map-support/register';
 import { App } from '@aws-cdk/cdk';
-import { ServiceCicdPipelines } from '../lib/cicd/pipelines';
 import { deploymentTargetAccounts } from './config';
 import services from './services';
+import { CrossAccountDeploymentRole } from '../lib/cicd/cross-account-deployment';
 
 const app = new App({
     autoRun: false,
 });
 
-new ServiceCicdPipelines(app, 'Default', {
+new CrossAccountDeploymentRole(app, "account", {
     services,
-    deploymentTargetAccounts,
+    deploymentTargetAccounts,  
 });
-
 app.run();

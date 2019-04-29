@@ -117,7 +117,7 @@ export class ServicePipeline extends Construct {
         });
 
         const sourceServicesAction = new GitHubSourceAction({
-            actionName: props.sourceTrigger === SourceTrigger.PullRequest ? 'GitHub_SubmitPR' : 'GitHub_PushToMaster',
+            actionName: props.sourceTrigger === SourceTrigger.PullRequest ? 'GitHub_Services_SubmitPR' : 'GitHub_Services_PushToMaster',
             owner: props.service.githubOwner,
             repo: props.service.githubRepoService,
             runOrder: 1,
@@ -127,7 +127,7 @@ export class ServicePipeline extends Construct {
         });
 
         const sourceMVPAction = new GitHubSourceAction({
-            actionName: props.sourceTrigger === SourceTrigger.PullRequest ? 'GitHub_SubmitPR' : 'GitHub_PushToMaster',
+            actionName: props.sourceTrigger === SourceTrigger.PullRequest ? 'GitHub_MVP_SubmitPR' : 'GitHub_MVP_PushToMaster',
             owner: props.service.githubOwner,
             repo: props.service.githubRepoMVP,
             runOrder: 2,
@@ -151,13 +151,13 @@ export class ServicePipeline extends Construct {
             ),
         });
         const buildActionServices = buildProjectServices.project.toCodePipelineBuildAction({
-            actionName: 'Build_Packages_For_Deploy',
+            actionName: 'Build_Packages_For_Services_Deploy',
             runOrder: 1,
             inputArtifact: sourceServicesAction.outputArtifact,
-            outputArtifactName: 'sourceOutput',
+            outputArtifactName: 'buildOutputServices',
             additionalOutputArtifactNames: [
-                'stagingPackage',
-                'prodPackage',
+                'stagingPackageServices',
+                'prodPackageServices',
             ],
         });
         const buildProjectMVP = new ServiceCodebuildProject(this.pipeline, 'buildProjectMVP', {
@@ -168,14 +168,10 @@ export class ServicePipeline extends Construct {
             ),
         });
         const buildActionMVP = buildProjectMVP.project.toCodePipelineBuildAction({
-            actionName: 'Build_Packages_For_Deploy',
+            actionName: 'Build_Packages_For_MVP_Deploy',
             runOrder: 2,
             inputArtifact: sourceMVPAction.outputArtifact,
-            outputArtifactName: 'sourceOutput',
-            additionalOutputArtifactNames: [
-                'stagingPackage',
-                'prodPackage',
-            ],
+            outputArtifactName: 'buildOutputMVP',
         });
         this.pipeline.addStage({
             name: 'Build_Packages',
@@ -191,16 +187,16 @@ export class ServicePipeline extends Construct {
         const stagingActionServices = stagingProjectServices.project.toCodePipelineBuildAction({
             actionName: 'Deploy_STAGING_Services',
             runOrder: 1,
-            inputArtifact: sourceServicesAction.outputArtifact,
+            inputArtifact: buildActionServices.outputArtifact,
             additionalInputArtifacts: [
-                buildActionServices.additionalOutputArtifact('stagingPackage'),
+                buildActionServices.additionalOutputArtifact('stagingPackageServices'),
             ],
         });
         const stagingActionS3MVP = new PipelineDeployAction({
-            inputArtifact: sourceMVPAction.outputArtifact,
+            inputArtifact: buildActionMVP.outputArtifact,
             extract: true,
             runOrder: 2,
-            actionName: 'Deploy_STAGING_Services',
+            actionName: 'Deploy_STAGING_MVP',
             bucket: Bucket.import(this, 'StagingTargetBucket', {
                 bucketArn: props.service.s3DeployBucketStagingArn
             }),
@@ -220,16 +216,16 @@ export class ServicePipeline extends Construct {
         const prodActionServices = prodProjectServices.project.toCodePipelineBuildAction({
             actionName: 'Deploy_PROD_Services',
             runOrder: 1,
-            inputArtifact: sourceServicesAction.outputArtifact,
+            inputArtifact: buildActionServices.outputArtifact,
             additionalInputArtifacts: [
-                buildActionServices.additionalOutputArtifact('prodPackage'),
+                buildActionServices.additionalOutputArtifact('prodPackageServices'),
             ],
         });
         const prodActionS3MVP = new PipelineDeployAction({
-            inputArtifact: sourceMVPAction.outputArtifact,
+            inputArtifact: buildActionMVP.outputArtifact,
             extract: true,
             runOrder: 2,
-            actionName: 'Deploy_STAGING_Services',
+            actionName: 'Deploy_PROD_MVP',
             bucket: Bucket.import(this, 'ProdTargetBucket', {
                 bucketArn: props.service.s3DeployBucketProdArn
             }),

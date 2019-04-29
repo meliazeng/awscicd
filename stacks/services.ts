@@ -5,12 +5,12 @@ import { githubOwner, githubTokenSsmPath } from './config';
 
 const mySlsService: ServiceDefinition = {
     serviceName: 'profound-impact',
-    githubRepoService: 'Services',
-    githubRepoMVP: 'MVP',
+    githubRepoService: 'testSrv',
+    githubRepoMVP: 'testWeb',
     githubOwner,
     githubTokenSsmPath,
-    s3DeployBucketProdArn: '',
-    s3DeployBucketStagingArn: '',
+    s3DeployBucketProdArn: 'arn:aws:s3:::bucketwebsite321',
+    s3DeployBucketStagingArn: 'arn:aws:s3:::bucketwebsite123',
     accessPermissions: [
         new PolicyStatement(PolicyStatementEffect.Allow)
             .addActions(

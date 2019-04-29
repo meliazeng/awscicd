@@ -5,15 +5,14 @@ import { Construct } from '@aws-cdk/cdk';
 import {
     Role, AccountPrincipal, Policy, PolicyStatement, PolicyStatementEffect,
 } from '@aws-cdk/aws-iam';
+import { ServiceDefinition } from './service-definition';
+import { DeploymentTargetAccounts } from './pipelines';
+import ssm = require('@aws-cdk/aws-ssm')
 
 export interface CrossAccountDeploymentRoleProps {
-    serviceName: string;
+    services: ServiceDefinition[];
     /** account ID where CodePipeline/CodeBuild is hosted */
-    deployingAccountId: string;
-    /** stage for which this role is being created */
-    targetStageName: string;
-    /** Permissions that deployer needs to assume to deploy stack */
-    deployPermissions: PolicyStatement[];
+    deploymentTargetAccounts: DeploymentTargetAccounts;
 }
 
 /**
@@ -34,14 +33,20 @@ export class CrossAccountDeploymentRole extends Construct {
 
     readonly roleName: string;
 
-    public constructor(parent: Construct, id: string, props: CrossAccountDeploymentRoleProps) {
-        super(parent, id);
-        this.roleName = CrossAccountDeploymentRole.getRoleNameForService(props.serviceName, props.targetStageName);
+    public constructor(scope: Construct, id: string, props: CrossAccountDeploymentRoleProps) {
+        super(scope, id);
+
+        const stageName = new ssm.ParameterStoreString(this, 'MyParameter', {
+            parameterName: 'stage_name',
+            version: 1,
+        });
+
+        this.roleName = CrossAccountDeploymentRole.getRoleNameForService(props.services[0].serviceName, stageName.toString());
         // Cross-account assume role
         // https://awslabs.github.io/aws-cdk/refs/_aws-cdk_aws-iam.html#configuring-an-externalid
         this.deployerRole = new Role(this, 'deployerRole', {
             roleName: this.roleName,
-            assumedBy: new AccountPrincipal(props.deployingAccountId),
+            assumedBy: new AccountPrincipal(props.deploymentTargetAccounts.Tools),
         });
         const passrole = new PolicyStatement(PolicyStatementEffect.Allow)
             .addActions(
@@ -49,7 +54,7 @@ export class CrossAccountDeploymentRole extends Construct {
             ).addAllResources();
         this.deployerPolicy = new Policy(this, 'deployerPolicy', {
             policyName: `${this.roleName}-policy`,
-            statements: [passrole, ...props.deployPermissions],
+            statements: [passrole, ...props.services[0].deployPermissions],
         });
         this.deployerPolicy.attachToRole(this.deployerRole);
         this.deployerRole.export();
