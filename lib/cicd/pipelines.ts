@@ -7,13 +7,14 @@ import {
 import { PipelineDeployAction, Bucket} from '@aws-cdk/aws-s3';
 import { Topic } from '@aws-cdk/aws-sns';
 import { EventRule } from '@aws-cdk/aws-events';
-import { Pipeline, GitHubSourceAction } from '@aws-cdk/aws-codepipeline';
+import { Pipeline, GitHubSourceAction, ManualApprovalAction } from '@aws-cdk/aws-codepipeline';
 import {
     Project, CodePipelineSource, LinuxBuildImage, //S3BucketBuildArtifacts,
 } from '@aws-cdk/aws-codebuild';
 import { ServiceDefinition } from './service-definition';
 import { CrossAccountDeploymentRole } from './cross-account-deployment';
 import { deploymentTargetAccounts } from '../../stacks/config';
+
 
 export enum SourceTrigger {
     Master = 'master', // triggered on merge to master
@@ -201,10 +202,17 @@ export class ServicePipeline extends Construct {
                 bucketArn: props.service.s3DeployBucketStagingArn
             }),
         });
+
+        const stagingActionApproval = new ManualApprovalAction({
+            notifyEmails: ["cgjames2008@gmail.com"],
+            runOrder: 3,
+            actionName: "UAT approval"
+        });
         this.pipeline.addStage({
             name: 'Deploy_STAGING',
-            actions: [stagingActionServices, stagingActionS3MVP],
+            actions: [stagingActionServices, stagingActionS3MVP,stagingActionApproval ],
         });
+
         // Prod stage requires cross-account access as codebuild isn't running in same account
         const prodProjectServices = new ServiceCodebuildProject(this.pipeline, 'deploy-services-prod', {
             projectName: `${pipelineName}_services_prod`,
